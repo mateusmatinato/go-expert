@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"strconv"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
+	"github.com/mateusmatinato/go-expert/sql-test/domain/user"
+	"github.com/mateusmatinato/go-expert/sql-test/repository"
+	"github.com/mateusmatinato/go-expert/sql-test/validator"
 )
 
 func main() {
@@ -17,6 +17,8 @@ func main() {
 	}
 	defer db.Close()
 
+	userRepo := repository.NewRepository(db)
+
 	args := os.Args[1:]
 	if len(args) == 0 {
 		printHelp()
@@ -25,18 +27,19 @@ func main() {
 
 	cmd := args[0]
 	params := args[1:]
+
 	switch cmd {
 	case "INSERT":
-		if err := validateUserParams(params); err != nil {
+		if err := validator.ValidateUserParams(params); err != nil {
 			panic(err.Error())
 		}
 
-		user, err := NewUser(params[0], params[1])
+		user, err := user.NewUser(params[0], params[1])
 		if err != nil {
 			panic(err.Error())
 		}
 
-		if err = insertUser(db, user); err != nil {
+		if err = userRepo.InsertUser(user); err != nil {
 			panic(err.Error())
 		}
 		fmt.Println("User inserted successfully")
@@ -47,7 +50,7 @@ func main() {
 			id = &params[0]
 		}
 
-		users, err := selectUser(db, id)
+		users, err := userRepo.SelectUser(id)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -60,11 +63,11 @@ func main() {
 			fmt.Printf("%v\n", u)
 		}
 	case "DELETE":
-		if err := validateDeleteParams(params); err != nil {
+		if err := validator.ValidateDeleteParams(params); err != nil {
 			panic(err.Error())
 		}
 
-		user, err := selectUser(db, &params[0])
+		user, err := userRepo.SelectUser(&params[0])
 		if err != nil {
 			panic(err.Error())
 		}
@@ -73,7 +76,7 @@ func main() {
 			return
 		}
 
-		if err = deleteUser(db, user[0].Id); err != nil {
+		if err = userRepo.DeleteUser(user[0].Id); err != nil {
 			panic(err.Error())
 		}
 
@@ -82,85 +85,6 @@ func main() {
 	default:
 		printHelp()
 	}
-}
-
-type User struct {
-	Id   string
-	Name string
-	Age  uint64
-}
-
-func NewUser(name string, ageStr string) (*User, error) {
-	age, err := strconv.ParseUint(ageStr, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	id, err := uuid.NewUUID()
-	if err != nil {
-		return nil, err
-	}
-	return &User{
-		Id:   id.String(),
-		Name: name,
-		Age:  age,
-	}, nil
-}
-
-func insertUser(db *sql.DB, user *User) error {
-	_, err := db.Exec("INSERT INTO users (id, name, age) VALUES (?, ?, ?)", user.Id, user.Name, user.Age)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func deleteUser(db *sql.DB, id string) error {
-	_, err := db.Exec("DELETE FROM users WHERE id = ?", id)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func selectUser(db *sql.DB, id *string) ([]User, error) {
-	var where string
-	var args []any
-	if id != nil {
-		where = "WHERE id = ?"
-		args = append(args, *id)
-	}
-
-	rows, err := db.Query("SELECT * FROM users "+where, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	users := []User{}
-	for rows.Next() {
-		var user User
-		if err := rows.Scan(&user.Id, &user.Name, &user.Age); err != nil {
-			return nil, err
-		}
-		users = append(users, user)
-	}
-
-	return users, nil
-}
-
-func validateDeleteParams(params []string) error {
-	if len(params) != 1 {
-		return fmt.Errorf("expected 1 param, got %d", len(params))
-	}
-	return nil
-}
-
-func validateUserParams(params []string) error {
-	if len(params) != 2 {
-		return fmt.Errorf("expected 2 params, got %d", len(params))
-	}
-	return nil
 }
 
 func printHelp() {
