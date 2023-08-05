@@ -19,8 +19,23 @@ type userRepositoryHandler struct {
 }
 
 func NewRepository(db *sql.DB) UserRepository {
+	createTableUsers(db)
+
 	return &userRepositoryHandler{
 		db: db,
+	}
+}
+
+func createTableUsers(db *sql.DB) {
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS users (
+			id VARCHAR(36) NOT NULL,
+			name VARCHAR(255) NOT NULL,
+			age INT NOT NULL,
+			PRIMARY KEY (id)
+		)
+	`); err != nil {
+		panic(err.Error())
 	}
 }
 
